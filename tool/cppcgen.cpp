@@ -125,9 +125,7 @@ static inline void rtrim(std::string &s) {
 }
 
 void output_member_function_typedef(std::stringstream& out, const cppast::cpp_entity& e, std::string& current_class) {
-    if (e.kind() != cppast::cpp_entity_kind::member_function_t) {
-        return;
-    }
+    if (e.kind() != cppast::cpp_entity_kind::member_function_t) return;
 
     auto& mf = static_cast<const cppast::cpp_member_function_base&>(e);
     out << "typedef ";
@@ -182,7 +180,7 @@ void output_member_function(std::stringstream& out, const cppast::cpp_entity& e,
     bool is_override = cppast::is_overriding(mf.virtual_info());
     // generate method
     out << prefix << method_stub;
-    if (method_stub.find("override") == std::string::npos || !is_override) {
+    if (method_stub.find("override") == std::string::npos && !is_override) {
         out << " override";
     }
     out << "\n";
@@ -220,6 +218,97 @@ void output_member_function(std::stringstream& out, const cppast::cpp_entity& e,
 
     }
 
+    out << prefix << "}\n";
+}
+
+void output_consdes_typedef(std::stringstream& out, const cppast::cpp_entity& e, std::string& current_class) {
+    bool is_destructor = e.kind() == cppast::cpp_entity_kind::destructor_t;
+    bool is_constructor = e.kind() == cppast::cpp_entity_kind::constructor_t;
+    if (!is_destructor && !is_constructor) return;
+
+    auto& mf = static_cast<const cppast::cpp_function_base&>(e);
+    out << "typedef ";
+    out << "void" << " ";
+
+    if (is_constructor) {
+        out << "(*new";
+    }
+    else {
+        out << "(*destroy";
+    }
+    out << current_class << FUNC_SUFFIX << ")(";
+    int i = 0;
+    for (auto& param : mf.parameters()) {
+        out << ( i ? ", " : "" );
+        out << cppast::to_string(param.type()) << " " << param.name();
+        i++;
+    }
+    out << ");\n";
+}
+
+void output_consdes(std::stringstream& out, const cppast::cpp_entity& e, std::string& prefix, std::string& base_class, std::string& current_class) {
+    bool is_destructor = e.kind() == cppast::cpp_entity_kind::destructor_t;
+    bool is_constructor = e.kind() == cppast::cpp_entity_kind::constructor_t;
+    if (!is_destructor && !is_constructor) return;
+
+    auto& mf = static_cast<const cppast::cpp_function_base&>(e);
+    int j = 0;
+    for (auto& param : mf.parameters()) {
+        if (param.name().empty()) {
+            param.set_name("param" + std::to_string(j));
+        }
+        j++;
+    }
+
+    std::string method_stub = generate_synopsis(e);
+    rtrim(method_stub);
+    method_stub.pop_back(); // get rid of semicolon
+
+    std::string mvar_name = FUNC_VAR_PREFIX + (is_constructor ? "new" : "destroy") + current_class;
+    std::string func_type = current_class + FUNC_SUFFIX;
+    std::stringstream all_params_stream;
+
+    int i = 0;
+    for (auto& param : mf.parameters()) {
+        all_params_stream << ( i ? ", " : "" );
+        all_params_stream << param.name();
+        i++;
+    }
+    std::string all_params = all_params_stream.str();
+
+    // generate class var
+    out << prefix;
+    if (is_constructor) {
+        out << "new";
+    }
+    else {
+        out << "destroy";
+    }
+    out << func_type << " " << mvar_name << ";\n";
+    // TODO: Generate class var accessors (Get and Set)
+    // Maybe don't need to?
+
+    // generate method
+    method_stub.replace(method_stub.find(base_class), base_class.size(), current_class);
+    out << prefix << method_stub;
+    // call super
+    if (is_constructor) {
+        out << ": " << base_class << "(" << all_params << ")\n";
+    }
+    out << prefix << "{\n";
+    out << prefix << prefix;
+
+    out << "if (" << mvar_name << "){\n";
+    out << prefix << prefix << prefix;
+    if (i > 0) {
+        out << mvar_name << "(" << all_params << ");\n";
+    }
+    else {
+        out << mvar_name << "();\n";
+    }
+    out << prefix << prefix;
+    out << "}\n"; // endif
+                  //
     out << prefix << "}\n";
 }
 
@@ -268,9 +357,6 @@ void print_ast(std::ostream& out, const cppast::cpp_file& file)
                     class_stream << "\n{\n";
                     class_stream << "public:\n";
                 }
-                /* else if (e.kind() == cppast::cpp_entity_kind::member_function_t) { */
-                    
-                /* } */
                 prefix += "  ";
             }
             else if (info.event == cppast::visitor_info::container_entity_exit)
@@ -285,7 +371,20 @@ void print_ast(std::ostream& out, const cppast::cpp_file& file)
             }
             else
             {
-                if (e.kind() == cppast::cpp_entity_kind::member_function_t) {
+                if (e.kind() == cppast::cpp_entity_kind::constructor_t ||
+                        e.kind() == cppast::cpp_entity_kind::destructor_t) {
+                    auto& mf = static_cast<const cppast::cpp_function_base&>(e);
+                    int j = 0;
+                    for (auto& param : mf.parameters()) {
+                        if (param.name().empty()) {
+                            param.set_name("param" + std::to_string(j));
+                        }
+                        j++;
+                    }
+                    output_consdes_typedef(forward_decls, e, current_class);
+                    output_consdes(class_stream, e, prefix, base_class, current_class);
+                }
+                else if (e.kind() == cppast::cpp_entity_kind::member_function_t) {
                     auto& mf = static_cast<const cppast::cpp_member_function_base&>(e);
                     int j = 0;
                     for (auto& param : mf.parameters()) {
