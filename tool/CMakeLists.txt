@@ -7,3 +7,9 @@ target_link_libraries(cppast_tool PUBLIC cppast cxxopts)
 set_target_properties(cppast_tool PROPERTIES CXX_STANDARD 11 OUTPUT_NAME cppast)
 
 install(TARGETS cppast_tool)
+
+add_executable(cppcgen cppcgen.cpp)
+target_link_libraries(cppcgen PUBLIC cppast cxxopts)
+set_target_properties(cppcgen PROPERTIES CXX_STANDARD 11 OUTPUT_NAME cppcgen)
+
+install(TARGETS cppcgen)
