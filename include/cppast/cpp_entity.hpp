@@ -65,6 +65,11 @@ public:
         return name_;
     }
 
+    void set_name(const std::string& name) const noexcept
+    {
+        this->name_ = name;
+    }
+
     /// \returns The name of the new scope created by the entity,
     /// if there is any.
     type_safe::optional<cpp_scope_name> scope_name() const
@@ -170,7 +175,7 @@ private:
         parent_ = type_safe::ref(parent);
     }
 
-    std::string                               name_;
+    mutable std::string                               name_;
     std::string                               comment_;
     cpp_attribute_list                        attributes_;
     type_safe::optional_ref<const cpp_entity> parent_;
