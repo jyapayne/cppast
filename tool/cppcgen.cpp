@@ -163,6 +163,9 @@ void output_member_function(std::stringstream& out, const cppast::cpp_entity& e,
     std::string mvar_name = FUNC_VAR_PREFIX + mf.name();
     std::string func_type = current_class + mf.name() + FUNC_SUFFIX;
     std::stringstream all_params_stream;
+    /* std::unique_ptr<cppast::cpp_type> ty = cppast::cpp_user_defined_type::build(cppast::cpp_type_ref(cppast::cpp_entity_id(func_type), func_type)); */
+    /* auto fp = cppast::cpp_function_parameter::build(std::string("callback"), std::move(ty), nullptr); */
+    /* mf.add_parameter(); */
 
     int i = 0;
     for (auto& param : mf.parameters()) {
@@ -177,10 +180,16 @@ void output_member_function(std::stringstream& out, const cppast::cpp_entity& e,
     // TODO: Generate class var accessors (Get and Set)
     // Maybe don't need to?
 
-    bool is_override = cppast::is_overriding(mf.virtual_info());
+    /* if (i > 0) { */
+    /*     method_stub.replace(method_stub.find(")"), 1, ", " + func_type + " callback)"); */
+    /* } */
+    /* else { */
+    /*     method_stub.replace(method_stub.find(")"), 1, func_type + " callback)"); */
+    /* } */
+    // bool is_override = cppast::is_overriding(mf.virtual_info());
     // generate method
     out << prefix << method_stub;
-    if (method_stub.find("override") == std::string::npos && !is_override) {
+    if (method_stub.find("override") == std::string::npos) {
         out << " override";
     }
     out << "\n";
@@ -277,14 +286,14 @@ void output_consdes(std::stringstream& out, const cppast::cpp_entity& e, std::st
     std::string all_params = all_params_stream.str();
 
     // generate class var
-    out << prefix;
-    if (is_constructor) {
-        out << "new";
-    }
-    else {
-        out << "destroy";
-    }
-    out << func_type << " " << mvar_name << ";\n";
+    /* out << prefix; */
+    /* if (is_constructor) { */
+    /*     out << "new"; */
+    /* } */
+    /* else { */
+    /*     out << "destroy"; */
+    /* } */
+    /* out << func_type << " " << mvar_name << ";\n"; */
     // TODO: Generate class var accessors (Get and Set)
     // Maybe don't need to?
 
@@ -293,22 +302,22 @@ void output_consdes(std::stringstream& out, const cppast::cpp_entity& e, std::st
     out << prefix << method_stub;
     // call super
     if (is_constructor) {
-        out << ": " << base_class << "(" << all_params << ")\n";
+        out << ": " << base_class << "(" << all_params << ")";
     }
-    out << prefix << "{\n";
-    out << prefix << prefix;
+    out << prefix << "{";
+    //out << prefix << prefix;
 
-    out << "if (" << mvar_name << "){\n";
-    out << prefix << prefix << prefix;
-    if (i > 0) {
-        out << mvar_name << "(" << all_params << ");\n";
-    }
-    else {
-        out << mvar_name << "();\n";
-    }
-    out << prefix << prefix;
-    out << "}\n"; // endif
-                  //
+    /* out << "if (" << mvar_name << "){\n"; */
+    /* out << prefix << prefix << prefix; */
+    /* if (i > 0) { */
+    /*     out << mvar_name << "(" << all_params << ");\n"; */
+    /* } */
+    /* else { */
+    /*     out << mvar_name << "();\n"; */
+    /* } */
+    /* out << prefix << prefix; */
+    /* out << "}\n"; // endif */
+    /*               // */
     out << prefix << "}\n";
 }
 
@@ -323,6 +332,9 @@ void print_ast(std::ostream& out, const cppast::cpp_file& file)
     std::string base_class; // the current base class
 
     std::stringstream forward_decls;
+    // TODO: Allow specifying all params by constructor
+    /* std::stringstream init_params; */
+    /* std::stringstream arg_init; */
     std::stringstream class_stream;
 
     // - Forward declare the class
@@ -341,7 +353,8 @@ void print_ast(std::ostream& out, const cppast::cpp_file& file)
                      (e.kind() == cppast::cpp_entity_kind::member_function_t && static_cast<const cppast::cpp_member_function_base&>(e).is_virtual()) ||
                      (e.kind() == cppast::cpp_entity_kind::constructor_t) ||
                      (e.kind() == cppast::cpp_entity_kind::destructor_t && static_cast<const cppast::cpp_destructor&>(e).is_virtual()) ||
-                     e.kind() == cppast::cpp_entity_kind::base_class_t
+                     e.kind() == cppast::cpp_entity_kind::base_class_t ||
+                     e.kind() == cppast::cpp_entity_kind::macro_definition_t
                     )
                    );
         },
@@ -381,7 +394,7 @@ void print_ast(std::ostream& out, const cppast::cpp_file& file)
                         }
                         j++;
                     }
-                    output_consdes_typedef(forward_decls, e, current_class);
+                    // output_consdes_typedef(forward_decls, e, current_class);
                     output_consdes(class_stream, e, prefix, base_class, current_class);
                 }
                 else if (e.kind() == cppast::cpp_entity_kind::member_function_t) {
@@ -397,6 +410,10 @@ void print_ast(std::ostream& out, const cppast::cpp_file& file)
                     output_member_function_typedef(forward_decls, e, current_class);
                     output_member_function(class_stream, e, prefix, base_class, current_class);
                 }
+                /* else if (e.kind() == cppast::cpp_entity_kind::macro_definition_t) { */
+                /*     auto& mf = static_cast<const cppast::cpp_macro_definition&>(e); */
+                /*     std::cerr << e.name() << "\n"; */
+                /* } */
             }
 
             return true;
