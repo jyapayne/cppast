@@ -1,6 +1,8 @@
 # Copyright (C) 2017-2022 Jonathan Müller and cppast contributors
 # SPDX-License-Identifier: MIT
 # found in the top-level directory of this distribution.
+set (CMAKE_CXX_STANDARD 20)
+
 
 set(detail_header
         ../include/cppast/detail/assert.hpp
@@ -106,7 +108,7 @@ set(libclang_source
         libclang/variable_parser.cpp)
 
 add_library(cppast ${detail_header} ${header} ${source} ${libclang_source})
-target_compile_features(cppast PUBLIC cxx_std_11)
+target_compile_features(cppast PUBLIC cxx_std_20)
 target_include_directories(cppast PRIVATE ../include SYSTEM INTERFACE ../include)
 target_link_libraries(cppast PUBLIC type_safe _cppast_tiny_process _cppast_libclang)
 target_compile_definitions(cppast PUBLIC

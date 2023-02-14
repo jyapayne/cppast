@@ -4,6 +4,7 @@
 
 cmake_minimum_required(VERSION 3.11)
 project(cppast VERSION 0.1.0)
+set (CMAKE_CXX_STANDARD 20)
 
 # options
 option(CPPAST_BUILD_TEST "whether or not to build the tests" OFF)
