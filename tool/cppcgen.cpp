@@ -20,6 +20,7 @@
 #include <cppast/cpp_namespace.hpp>          // for cpp_namespace
 #include <cppast/libclang_parser.hpp> // for libclang_parser, libclang_compile_config, cpp_entity,...
 #include <cppast/visitor.hpp>         // for visit()
+#include <cppast/detail/intrusive_list.hpp>
 
 std::string CLASS_SUFFIX = "Ext";
 std::string FUNC_SUFFIX = "Func";
@@ -603,21 +604,21 @@ void output_consdes_typedef(std::stringstream& out, const cppast::cpp_entity& e,
     out << ");\n";
 }
 
-void output_constructor(std::stringstream& out, std::string& var_init_str, std::string& all_params, std::vector<const cppast::cpp_function_parameter*> constr_params, bool has_constructor, std::string& prefix, std::string& base_class, std::string& current_class) {
-    if (all_params.length() == 0 and constr_params.size() == 0) return;
+void output_constructor(std::stringstream& out, std::string& var_init_str, std::string& all_params, cppast::detail::iteratable_intrusive_list<cppast::cpp_function_parameter> constr_params, bool has_constructor, std::string& prefix, std::string& base_class, std::string& current_class) {
+    if (all_params.length() == 0 and constr_params.empty()) return;
     std::stringstream constr_param_init_stream;
     std::stringstream constr_param_stream;
 
     int i = 0;
-    for (auto param : constr_params) {
+    for (auto& param : constr_params) {
         constr_param_init_stream << (i ? ", " : "");
-        constr_param_init_stream << cppast::to_string(param->type()) << " " << param->name();
+        constr_param_init_stream << cppast::to_string(param.type()) << " " << param.name();
 
         constr_param_stream << (i ? ", " : "");
-        constr_param_stream << param->name();
+        constr_param_stream << param.name();
         i++;
     }
-    if (all_params.length() > 0 && constr_params.size() > 0) {
+    if (all_params.length() > 0 && !constr_params.empty()) {
         constr_param_init_stream << ", ";
     }
     
@@ -730,7 +731,7 @@ void print_ast(std::ostream& out, const cppast::cpp_file& file, const cppast::cp
 
     out << "#ifndef " << guard_name << "\n";
     out << "#define " << guard_name << "\n\n";
-    out << "#include <wx/wx.h>\n#include <wx/vidmode.h>\n#include <stdexcept>\n\n";
+    out << "#include <wx/wx.h>\n#include <" << include_path << ">\n#include <wx/vidmode.h>\n#include <stdexcept>\n\n";
     
     /* out << "namespace wxname {\n#include_next <" << include_path << ">\n};\n\n"; */
 
@@ -745,6 +746,7 @@ void print_ast(std::ostream& out, const cppast::cpp_file& file, const cppast::cp
     bool has_constructor = false;
     int min_num_params = INT_MAX;
     std::vector<const cppast::cpp_function_parameter*> constr_params;
+    std::vector<const cppast::cpp_function*> constructors;
 
     std::map<std::string, const cppast::cpp_member_function*> members;
 
@@ -786,6 +788,7 @@ void print_ast(std::ostream& out, const cppast::cpp_file& file, const cppast::cp
                     std::cerr << "\nCLASS: " << mf.name() << std::endl;
 
                     for (auto& base : mf.bases()) {
+                        if (base.type().kind() != cppast::cpp_type_kind::user_defined_t) continue;
                         auto entity = idx.lookup(*static_cast<const cppast::cpp_user_defined_type&>(base.type()).entity().id().data());
                         std::cerr << "BASENAME: " << base.name() << std::endl;
                         if (entity.has_value()) {
@@ -794,11 +797,14 @@ void print_ast(std::ostream& out, const cppast::cpp_file& file, const cppast::cp
                     }
                     while (!stack.empty()) {
                         auto entity = stack.back(); stack.pop_back();
+                        if (entity->kind() != cppast::cpp_entity_kind::class_t) continue;
                         auto& entclass = static_cast<const cppast::cpp_class&>(*entity);
                         if (entclass.name().empty()) continue;
                         std::cerr << "BASECLASS: " << entclass.name() << std::endl;
                         cppast::visit(entclass, method_filter,
                             [&](const cppast::cpp_entity& e, cppast::visitor_info info) {
+                                if (e.kind() != cppast::cpp_entity_kind::member_function_t)
+                                    return true;
                                 if (!e.parent().has_value()) return true;
                                 if (e.parent().value().name() != entclass.name()) return true;
                                 auto& mf = static_cast<const cppast::cpp_member_function&>(e);
@@ -812,6 +818,9 @@ void print_ast(std::ostream& out, const cppast::cpp_file& file, const cppast::cp
                             }
                         );
                         for (auto& entbase : entclass.bases()) {
+                            if (entbase.type().kind() != cppast::cpp_type_kind::user_defined_t) {
+                                continue;
+                            }
                             auto ent = idx.lookup(*static_cast<const cppast::cpp_user_defined_type&>(entbase.type()).entity().id().data());
                             if (ent.has_value()) {
                                 stack.push_back(&ent.value());
@@ -855,7 +864,17 @@ void print_ast(std::ostream& out, const cppast::cpp_file& file, const cppast::cp
                         param_str.pop_back();
                         param_str.pop_back();
                     }
-                    output_constructor(current_class_stream, var_init_str, param_str, constr_params, has_constructor, prefix, base_class, current_class);
+
+                    if (constructors.empty()) {
+                        cppast::detail::intrusive_list<cppast::cpp_function_parameter> params;
+                        cppast::detail::iteratable_intrusive_list<cppast::cpp_function_parameter> emptyList(type_safe::ref(params));
+
+                        output_constructor(current_class_stream, var_init_str, param_str, emptyList, false, prefix, base_class, current_class);
+                    }
+                    for (auto& fn : constructors) {
+                        output_constructor(current_class_stream, var_init_str, param_str, fn->parameters(), true, prefix, base_class, current_class);
+                    }
+
                     init_params.str(std::string()); // clear
                     var_init.str(std::string()); // clear
                     current_class_stream << "};\n\n";
@@ -875,6 +894,7 @@ void print_ast(std::ostream& out, const cppast::cpp_file& file, const cppast::cp
                     min_num_params = INT_MAX;
                     has_constructor = false;
                     constr_params.clear();
+                    constructors.clear();
                     //std::cerr << "EXIT CLASS\n";
                     //std::cerr << current_class << "\n\n";
                     current_class = "";
@@ -889,6 +909,7 @@ void print_ast(std::ostream& out, const cppast::cpp_file& file, const cppast::cp
 
                 if (e.kind() == cppast::cpp_entity_kind::constructor_t) {
                     auto& mf = static_cast<const cppast::cpp_function&>(e);
+                    constructors.push_back(&mf);
                     int num_params = 0;
                     std::vector<const cppast::cpp_function_parameter*> tempparams;
                     has_constructor = true;
